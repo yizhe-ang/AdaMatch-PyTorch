@@ -1,0 +1,18 @@
+INPUT:
+  SIZE: (32, 32)
+  PIXEL_MEAN: [0.5, 0.5, 0.5]
+  PIXEL_STD: [0.5, 0.5, 0.5]
+  # Weak augmentations
+  TRANSFORMS: ['random_flip', 'random_crop', 'normalize']
+
+DATASET:
+  NAME: 'Digit5'
+  # NUM_LABELED:  # number of labeled instances (for the SSL setting)
+
+  # {'mnist', 'mnist_m', 'svhn', 'syn', 'usps'}
+  # SOURCE_DOMAINS:
+  # TARGET_DOMAINS:
+
+MODEL:
+  BACKBONE:
+    NAME: 'wide_resnet_28_2'
