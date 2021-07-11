@@ -5,16 +5,19 @@ DATALOADER:
     # Set to false if you want to have unique
     # data loader params for train_u
     SAME_AS_X: False
-    BATCH_SIZE: 448
+    BATCH_SIZE: 192  # 3x of train_x.batch_size
   TEST:
     BATCH_SIZE: 500
 
 OPTIM:
   NAME: 'sgd'
-  LR: 0.05
-  STEPSIZE: [4000]
-  MAX_EPOCH: 4000
+  LR: 0.03
+  WEIGHT_DECAY: 0.0005
+  # STEPSIZE: [4000]
+  MAX_EPOCH: 2  # FIXME 32M images (source + target images?)
+
   LR_SCHEDULER: 'cosine'
+  LR_SCHEDULER_DECAY: 0.25
 
 TRAIN:
   COUNT_ITER: 'train_u'
@@ -22,4 +25,5 @@ TRAIN:
 
 TRAINER:
   ADAMATCH:
+    # FIXME Double-check this
     STRONG_TRANSFORMS: ['random_flip', 'randaugment_fixmatch', 'normalize', 'cutout']

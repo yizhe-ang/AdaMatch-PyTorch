@@ -7,6 +7,8 @@ INPUT:
 
 DATASET:
   NAME: 'Digit5'
+
+  # VAL_PERCENT: 0.0
   # NUM_LABELED:  # number of labeled instances (for the SSL setting)
 
   # {'mnist', 'mnist_m', 'svhn', 'syn', 'usps'}
@@ -16,3 +18,4 @@ DATASET:
 MODEL:
   BACKBONE:
     NAME: 'wide_resnet_28_2'
+    PRETRAINED: False

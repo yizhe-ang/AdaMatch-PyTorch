@@ -67,7 +67,9 @@ def extend_cfg(cfg):
     """
     cfg.TRAINER.ADAMATCH = CN()
     cfg.TRAINER.ADAMATCH.STRONG_TRANSFORMS = ()
+    cfg.TRAINER.ADAMATCH.CONF_THRE = 0.9
 
+    cfg.OPTIM.LR_SCHEDULER_DECAY = 0.0
 
 def setup_cfg(args):
     cfg = get_cfg_default()
