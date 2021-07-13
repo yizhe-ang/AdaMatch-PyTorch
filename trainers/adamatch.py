@@ -89,7 +89,6 @@ class AdaMatch(TrainerXU):
 
     def forward_backward(self, batch_s, batch_t):
         # TODO Generalize loss to other tasks (UDA, SSDA, SSL)
-        # TODO Learn the debugger
 
         n_iter = self.epoch * self.num_batches + self.batch_idx
 
@@ -139,6 +138,7 @@ class AdaMatch(TrainerXU):
         prob_t_w = F.softmax(logits_t_w, dim=1)  # [N_t, K]
 
         # Align the target label distribution to that of the source
+        # FIXME Estimate using the current batch? Or sth else
         expected_ratio = prob_s_w.mean(dim=0) / prob_t_w.mean(dim=0)  # [K]
         # FIXME Is this normalization correct?; L2 normalization?
         pseudo_t_w_unnorm = prob_t_w * expected_ratio  # [N_t, K]
