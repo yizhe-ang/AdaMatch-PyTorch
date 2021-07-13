@@ -68,8 +68,10 @@ def extend_cfg(cfg):
     cfg.TRAINER.ADAMATCH = CN()
     cfg.TRAINER.ADAMATCH.STRONG_TRANSFORMS = ()
     cfg.TRAINER.ADAMATCH.CONF_THRE = 0.9
+    cfg.TRAINER.ADAMATCH.RUNNING_STATS = False
 
-    cfg.OPTIM.LR_SCHEDULER_DECAY = 0.0
+    cfg.OPTIM.LR_SCHEDULER_DECAY = 0.25
+
 
 def setup_cfg(args):
     cfg = get_cfg_default()
@@ -94,7 +96,37 @@ def setup_cfg(args):
     return cfg
 
 
+def cfg_to_dict(cfg_node, key_list=[]):
+    """Convert a config node to dictionary"""
+    _VALID_TYPES = {tuple, list, str, int, float, bool}
+
+    if not isinstance(cfg_node, CN):
+        if type(cfg_node) not in _VALID_TYPES:
+            print(
+                "Key {} with value {} is not a valid type; valid types: {}".format(
+                    ".".join(key_list), type(cfg_node), _VALID_TYPES
+                ),
+            )
+        return cfg_node
+    else:
+        cfg_dict = dict(cfg_node)
+        for k, v in cfg_dict.items():
+            cfg_dict[k] = cfg_to_dict(v, key_list + [k])
+        return cfg_dict
+
+
 def main(args):
+
+    if args.wandb:
+        import wandb
+
+        wandb.init(
+            project="adamatch",
+            entity='lemonwaffle',
+            # config=cfg_to_dict(trainer.cfg),
+            sync_tensorboard=True,
+        )
+
     cfg = setup_cfg(args)
     if cfg.SEED >= 0:
         print("Setting fixed seed: {}".format(cfg.SEED))
@@ -109,6 +141,11 @@ def main(args):
     print("** System info **\n{}\n".format(collect_env_info()))
 
     trainer = build_trainer(cfg)
+
+    if args.wandb:
+        wandb.config = cfg_to_dict(trainer.cfg)
+        # wandb.config.update(cfg_to_dict(trainer.cfg))
+        # wandb.watch(trainer.model)
 
     if args.eval_only:
         trainer.load_model(args.model_dir, epoch=args.load_epoch)
@@ -166,6 +203,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-train", action="store_true", help="do not call trainer.train()"
     )
+    parser.add_argument("--wandb", action="store_true", help="init wandb for logging")
     parser.add_argument(
         "opts",
         default=None,

@@ -12,6 +12,13 @@ from dassl.optim.optimizer import build_optimizer
 from dassl.utils.torchtools import count_num_param, load_pretrained_weights
 
 
+def unnormalize_img(img, mean, std):
+    std = torch.Tensor(std)[:, None, None]
+    mean = torch.Tensor(mean)[:, None, None]
+
+    return img * std + mean
+
+
 @TRAINER_REGISTRY.register()
 class AdaMatch(TrainerXU):
     """AdaMatch: A Unified Approach to Semi-Supervised Learning
@@ -52,45 +59,53 @@ class AdaMatch(TrainerXU):
     def build_model(self):
         cfg = self.cfg
 
-        print('Building model')
+        print("Building model")
         self.model = SimpleNet(cfg, cfg.MODEL, self.num_classes)
         if cfg.MODEL.INIT_WEIGHTS:
             load_pretrained_weights(self.model, cfg.MODEL.INIT_WEIGHTS)
         self.model.to(self.device)
-        print('# params: {:,}'.format(count_num_param(self.model)))
+        print("# params: {:,}".format(count_num_param(self.model)))
         self.optim = build_optimizer(self.model, cfg.OPTIM)
 
         # Change lr_scheduler settings
-        # FIXME Double-check this; log this
         num_batches = len(self.train_loader_u)
         self.max_iter = self.max_epoch * num_batches
 
         self.sched = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.optim,
             self.max_iter,
-            cfg.OPTIM.LR * cfg.OPTIM.LR_SCHEDULER_DECAY  # min lr
+            eta_min=cfg.OPTIM.LR * cfg.OPTIM.LR_SCHEDULER_DECAY,  # min lr
         )
 
-        self.register_model('model', self.model, self.optim, self.sched)
+        self.register_model("model", self.model, self.optim, self.sched)
 
     def assess_y_pred_quality(self, y_pred, y_true, mask):
         n_masked_correct = (y_pred.eq(y_true).float() * mask).sum()
         acc_thre = n_masked_correct / (mask.sum() + 1e-5)
-        acc_raw = y_pred.eq(y_true).sum() / y_pred.numel() # raw accuracy
+        acc_raw = y_pred.eq(y_true).sum() / y_pred.numel()  # raw accuracy
         keep_rate = mask.sum() / mask.numel()
-        output = {
-            'acc_thre': acc_thre,
-            'acc_raw': acc_raw,
-            'keep_rate': keep_rate
-        }
+        output = {"acc_thre": acc_thre, "acc_raw": acc_raw, "keep_rate": keep_rate}
         return output
 
     def forward_backward(self, batch_s, batch_t):
         # TODO Generalize loss to other tasks (UDA, SSDA, SSL)
         # TODO Learn the debugger
 
+        n_iter = self.epoch * self.num_batches + self.batch_idx
+
         parsed_data = self.parse_batch_train(batch_s, batch_t)
         input_s_w, input_s_s, label_s, input_t_w, input_t_s, label_t = parsed_data
+
+        # Log sample training images
+        if n_iter == 0:
+            self._write_train_imgs(
+                {
+                    "source_weak_imgs": input_s_w,
+                    "source_strong_imgs": input_s_s,
+                    "target_weak_imgs": input_t_w,
+                    "target_strong_imgs": input_t_s,
+                }
+            )
 
         n_source_w = input_s_w.size(0)
         n_source = n_source_w * 2
@@ -103,13 +118,18 @@ class AdaMatch(TrainerXU):
 
         # FIXME BatchNorm: disable update;
         # but use running statistics, or still use batch statistics?
-        self._set_batchnorm_eval()
-        logits_s_dprime = self.model(input_s)
-        self._set_batchnorm_train()
+        if self.cfg.TRAINER.ADAMATCH.RUNNING_STATS:
+            self._set_batchnorm_eval(self.model)
+            logits_s_dprime = self.model(input_s)
+            self._set_batchnorm_train(self.model)
+        else:
+            self._disable_batchnorm_tracking(self.model)
+            logits_s_dprime = self.model(input_s)
+            self._enable_batchnorm_tracking(self.model)
 
         # 1. Perform Random Logit Interpolation
         lamb = torch.rand_like(logits_s_prime)
-        logits_s = lamb * logits_s_prime + (1 - lamb) * logits_s_dprime
+        logits_s = (lamb * logits_s_prime) + ((1 - lamb) * logits_s_dprime)
         logits_s_w, logits_s_s = logits_s.chunk(2, dim=0)
 
         # 2. Distribution Alignment
@@ -120,7 +140,7 @@ class AdaMatch(TrainerXU):
 
         # Align the target label distribution to that of the source
         expected_ratio = prob_s_w.mean(dim=0) / prob_t_w.mean(dim=0)  # [K]
-        # FIXME Is this normalization correct?
+        # FIXME Is this normalization correct?; L2 normalization?
         pseudo_t_w_unnorm = prob_t_w * expected_ratio  # [N_t, K]
         pseudo_t_w = pseudo_t_w_unnorm / pseudo_t_w_unnorm.sum(dim=1, keepdims=True)
         # Generate soft pseudo-labels; stop gradient
@@ -140,10 +160,8 @@ class AdaMatch(TrainerXU):
         loss_target = self._soft_cross_entropy(logits_t_s, pseudo_t_w)  # [N_t]
         loss_target = (loss_target * mask_t).mean()
 
-        n_iter = self.epoch * self.num_batches + self.batch_idx
         mu = self._compute_loss_target_weight(n_iter, self.max_iter)
-
-        loss = loss_source + mu * loss_target
+        loss = loss_source + (mu * loss_target)
         self.model_backward_and_update(loss)
 
         # Evaluate pseudo-labels' accuracy
@@ -156,10 +174,11 @@ class AdaMatch(TrainerXU):
             "loss_s": loss_source.item(),
             "acc_s": compute_accuracy(logits_s, label_s.repeat(2))[0].item(),
             "loss_t": loss_target.item(),
-            'y_t_pred_acc_raw': y_t_pred_stats['acc_raw'],
-            'y_t_pred_acc_thre': y_t_pred_stats['acc_thre'],
-            'y_t_pred_keep': y_t_pred_stats['keep_rate'],
+            "y_t_pred_acc_raw": y_t_pred_stats["acc_raw"],
+            "y_t_pred_acc_thre": y_t_pred_stats["acc_thre"],
+            "y_t_pred_keep": y_t_pred_stats["keep_rate"],
         }
+        self.write_scalar("train/loss_t_weight", mu, n_iter)
 
         # Update learning rate scheduler
         self.update_lr()
@@ -186,19 +205,48 @@ class AdaMatch(TrainerXU):
 
         return input_s_w, input_s_s, label_s, input_t_w, input_t_s, label_t
 
-    def _set_batchnorm_eval(self):
+    def _write_train_imgs(self, imgs_dict, n_imgs=16):
+        mean = self.cfg.INPUT.PIXEL_MEAN
+        std = self.cfg.INPUT.PIXEL_STD
+
+        for t, img in imgs_dict.items():
+            self._writer.add_images(
+                t,
+                unnormalize_img(img[:n_imgs], mean, std),
+                0,
+            )
+
+    @staticmethod
+    def _set_batchnorm_eval(model):
         def fn(module):
             if isinstance(module, nn.modules.batchnorm._BatchNorm):
                 module.eval()
 
-        self.model.apply(fn)
+        model.apply(fn)
 
-    def _set_batchnorm_train(self):
+    @staticmethod
+    def _set_batchnorm_train(model):
         def fn(module):
             if isinstance(module, nn.modules.batchnorm._BatchNorm):
                 module.train()
 
-        self.model.apply(fn)
+        model.apply(fn)
+
+    @staticmethod
+    def _disable_batchnorm_tracking(model):
+        def fn(module):
+            if isinstance(module, nn.modules.batchnorm._BatchNorm):
+                module.track_running_stats = False
+
+        model.apply(fn)
+
+    @staticmethod
+    def _enable_batchnorm_tracking(model):
+        def fn(module):
+            if isinstance(module, nn.modules.batchnorm._BatchNorm):
+                module.track_running_stats = True
+
+        model.apply(fn)
 
     @staticmethod
     def _soft_cross_entropy(

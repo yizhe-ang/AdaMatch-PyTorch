@@ -1,15 +1,15 @@
 INPUT:
   SIZE: (32, 32)
+  # FIXME Check if this is correct; leave it in [0, 1] range instead?
   PIXEL_MEAN: [0.5, 0.5, 0.5]
   PIXEL_STD: [0.5, 0.5, 0.5]
   # Weak augmentations
   TRANSFORMS: ['random_flip', 'random_crop', 'normalize']
+  # `random_translation` should have p=1.0 instead
+  # TRANSFORMS: ['random_flip', 'random_translation', 'normalize']
 
 DATASET:
   NAME: 'Digit5'
-
-  # VAL_PERCENT: 0.0
-  # NUM_LABELED:  # number of labeled instances (for the SSL setting)
 
   # {'mnist', 'mnist_m', 'svhn', 'syn', 'usps'}
   # SOURCE_DOMAINS:

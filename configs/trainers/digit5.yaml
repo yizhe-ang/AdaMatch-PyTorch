@@ -14,10 +14,10 @@ OPTIM:
   LR: 0.03
   WEIGHT_DECAY: 0.0005
   # STEPSIZE: [4000]
-  MAX_EPOCH: 2  # FIXME 32M images (source + target images?)
+  MAX_EPOCH: 1000  # FIXME 32M images (source + target images?)
 
   LR_SCHEDULER: 'cosine'
-  LR_SCHEDULER_DECAY: 0.25
+  LR_SCHEDULER_DECAY: 0.25  # FIXME Check if this is correct
 
 TRAIN:
   COUNT_ITER: 'train_u'
@@ -25,5 +25,7 @@ TRAIN:
 
 TRAINER:
   ADAMATCH:
-    # FIXME Double-check this
+    # FIXME Double-check this; to exclude cutout?
     STRONG_TRANSFORMS: ['random_flip', 'randaugment_fixmatch', 'normalize', 'cutout']
+    CONF_THRE: 0.9
+    RUNNING_STATS: True
