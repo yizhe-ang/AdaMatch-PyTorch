@@ -143,8 +143,8 @@ def main(args):
     trainer = build_trainer(cfg)
 
     if args.wandb:
-        wandb.config = cfg_to_dict(trainer.cfg)
-        # wandb.config.update(cfg_to_dict(trainer.cfg))
+        # wandb.config = cfg_to_dict(trainer.cfg)
+        wandb.config.update(cfg_to_dict(trainer.cfg))
         # wandb.watch(trainer.model)
 
     if args.eval_only:

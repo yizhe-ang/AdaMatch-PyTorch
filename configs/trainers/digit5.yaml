@@ -28,4 +28,4 @@ TRAINER:
     # FIXME Double-check this; to exclude cutout?
     STRONG_TRANSFORMS: ['random_flip', 'randaugment_fixmatch', 'normalize', 'cutout']
     CONF_THRE: 0.9
-    RUNNING_STATS: True
+    RUNNING_STATS: False

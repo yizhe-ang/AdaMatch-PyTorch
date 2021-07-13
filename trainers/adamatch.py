@@ -13,8 +13,8 @@ from dassl.utils.torchtools import count_num_param, load_pretrained_weights
 
 
 def unnormalize_img(img, mean, std):
-    std = torch.Tensor(std)[:, None, None]
-    mean = torch.Tensor(mean)[:, None, None]
+    std = img.new_tensor(std)[:, None, None]
+    mean = img.new_tensor(mean)[:, None, None]
 
     return img * std + mean
 

@@ -2,13 +2,17 @@
 
 cd ..
 
+SOURCE=svhn
+TARGET=usps
+SEED=1
+
 python train.py \
     --root data \
-    --seed 1 \
+    --seed ${SEED} \
     --trainer AdaMatch \
-    --source-domains usps \
-    --target-domains mnist \
+    --source-domains ${SOURCE} \
+    --target-domains ${TARGET} \
     --dataset-config-file configs/datasets/digit5.yaml \
     --config-file configs/trainers/digit5.yaml \
-    --output-dir output/1 \
+    --output-dir output/${SOURCE}_${TARGET}_${SEED} \
     --wandb
