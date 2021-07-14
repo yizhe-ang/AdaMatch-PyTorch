@@ -122,8 +122,9 @@ def main(args):
 
         wandb.init(
             project="adamatch",
-            entity='lemonwaffle',
+            entity="lemonwaffle",
             # config=cfg_to_dict(trainer.cfg),
+            name=f"{args.source_domains[0]}_{args.target_domains[0]}_{args.seed}",
             sync_tensorboard=True,
         )
 
@@ -198,7 +199,7 @@ if __name__ == "__main__":
         help="load model from this directory for eval-only mode",
     )
     parser.add_argument(
-        "--load-epoch", type=int, help="load model weights at this epoch for evaluation"
+        "--load-epoch", type=int, help="lad model weights at this epoch for evaluation"
     )
     parser.add_argument(
         "--no-train", action="store_true", help="do not call trainer.train()"

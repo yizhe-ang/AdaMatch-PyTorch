@@ -109,11 +109,13 @@ class AdaMatch(TrainerXU):
         n_source_w = input_s_w.size(0)
         n_source = n_source_w * 2
 
+        # [N_s*2 + N_t*2, C, H, W]
         input_all = torch.cat([input_s_w, input_s_s, input_t_w, input_t_s], dim=0)
+        # [N_s*2, C, H, W]
         input_s = torch.cat([input_s_w, input_s_s], dim=0)
 
-        logits_all = self.model(input_all)
-        logits_s_prime = logits_all[:n_source]
+        logits_all = self.model(input_all)  # [N_all, K]
+        logits_s_prime = logits_all[:n_source]  # [N_s*2, K]
 
         # FIXME BatchNorm: disable update;
         # but use running statistics, or still use batch statistics?
@@ -123,16 +125,16 @@ class AdaMatch(TrainerXU):
             self._set_batchnorm_train(self.model)
         else:
             self._disable_batchnorm_tracking(self.model)
-            logits_s_dprime = self.model(input_s)
+            logits_s_dprime = self.model(input_s)  # [N_s*2, K]
             self._enable_batchnorm_tracking(self.model)
 
         # 1. Perform Random Logit Interpolation
         lamb = torch.rand_like(logits_s_prime)
         logits_s = (lamb * logits_s_prime) + ((1 - lamb) * logits_s_dprime)
-        logits_s_w, logits_s_s = logits_s.chunk(2, dim=0)
+        logits_s_w, logits_s_s = logits_s.chunk(2, dim=0)  # [N_s, K]
 
         # 2. Distribution Alignment
-        logits_t_w, logits_t_s = logits_all[n_source:].chunk(2, dim=0)
+        logits_t_w, logits_t_s = logits_all[n_source:].chunk(2, dim=0)  # [N_t, K]
 
         prob_s_w = F.softmax(logits_s_w, dim=1)  # [N_s, K]
         prob_t_w = F.softmax(logits_t_w, dim=1)  # [N_t, K]
