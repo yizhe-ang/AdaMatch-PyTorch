@@ -1,6 +1,10 @@
-wandb/
+train_wandb.py
+NOTES.md
+
 data/
 output/
+wandb/
+notebooks/
 .vscode/
 
 # Byte-compiled / optimized / DLL files

@@ -2,30 +2,27 @@ DATALOADER:
   TRAIN_X:
     BATCH_SIZE: 64
   TRAIN_U:
-    # Set to false if you want to have unique
-    # data loader params for train_u
     SAME_AS_X: False
-    BATCH_SIZE: 192  # 3x of train_x.batch_size
+    BATCH_SIZE: 192 # 3x of train_x.batch_size
   TEST:
     BATCH_SIZE: 500
 
 OPTIM:
-  NAME: 'sgd'
+  NAME: "sgd"
   LR: 0.03
   WEIGHT_DECAY: 0.0005
-  # STEPSIZE: [4000]
-  MAX_EPOCH: 1000  # FIXME 32M images (source + target images?)
+  MAX_EPOCH: 1000
 
-  LR_SCHEDULER: 'cosine'
-  LR_SCHEDULER_DECAY: 0.25  # FIXME Check if this is correct
+  LR_SCHEDULER: "cosine"
+  LR_SCHEDULER_DECAY: 0.25
 
 TRAIN:
-  COUNT_ITER: 'train_u'
+  COUNT_ITER: "train_u"
   PRINT_FREQ: 10
 
 TRAINER:
   ADAMATCH:
-    # FIXME Double-check this; to exclude cutout?
-    STRONG_TRANSFORMS: ['random_flip', 'randaugment_fixmatch', 'normalize', 'cutout']
+    # FIXME The paper uses random_flip, random_translation, CTAugment
+    STRONG_TRANSFORMS:
+      ["random_flip", "randaugment_fixmatch", "normalize", "cutout"]
     CONF_THRE: 0.9
-    RUNNING_STATS: False

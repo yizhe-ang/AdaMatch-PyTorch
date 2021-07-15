@@ -1,22 +1,17 @@
 INPUT:
   SIZE: (32, 32)
-  # FIXME Check if this is correct; leave it in [0, 1] range instead?
+  # Normalizes to [-1, 1] range
   PIXEL_MEAN: [0.5, 0.5, 0.5]
   PIXEL_STD: [0.5, 0.5, 0.5]
   # Weak augmentations
-  # FIXME Don't use random flip?
-  TRANSFORMS: ['random_flip', 'random_crop', 'normalize']
-  # `random_translation` should have p=1.0 instead
-  # TRANSFORMS: ['random_flip', 'random_translation', 'normalize']
+  # FIXME The paper uses random_flip, random_translation
+  TRANSFORMS: ["random_flip", "random_crop", "normalize"]
 
 DATASET:
-  NAME: 'Digit5'
-
-  # {'mnist', 'mnist_m', 'svhn', 'syn', 'usps'}
-  # SOURCE_DOMAINS:
-  # TARGET_DOMAINS:
+  # Domains: {'mnist', 'mnist_m', 'svhn', 'syn', 'usps'}
+  NAME: "Digit5"
 
 MODEL:
   BACKBONE:
-    NAME: 'wide_resnet_28_2'
+    NAME: "wide_resnet_28_2"
     PRETRAINED: False

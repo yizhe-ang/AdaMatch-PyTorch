@@ -88,8 +88,6 @@ class AdaMatch(TrainerXU):
         return output
 
     def forward_backward(self, batch_s, batch_t):
-        # TODO Generalize loss to other tasks (UDA, SSDA, SSL)
-
         n_iter = self.epoch * self.num_batches + self.batch_idx
 
         parsed_data = self.parse_batch_train(batch_s, batch_t)
@@ -114,19 +112,13 @@ class AdaMatch(TrainerXU):
         # [N_s*2, C, H, W]
         input_s = torch.cat([input_s_w, input_s_s], dim=0)
 
+        # Generate two different outputs of source input
         logits_all = self.model(input_all)  # [N_all, K]
         logits_s_prime = logits_all[:n_source]  # [N_s*2, K]
 
-        # FIXME BatchNorm: disable update;
-        # but use running statistics, or still use batch statistics?
-        if self.cfg.TRAINER.ADAMATCH.RUNNING_STATS:
-            self._set_batchnorm_eval(self.model)
-            logits_s_dprime = self.model(input_s)
-            self._set_batchnorm_train(self.model)
-        else:
-            self._disable_batchnorm_tracking(self.model)
-            logits_s_dprime = self.model(input_s)  # [N_s*2, K]
-            self._enable_batchnorm_tracking(self.model)
+        self._disable_batchnorm_tracking(self.model)
+        logits_s_dprime = self.model(input_s)  # [N_s*2, K]
+        self._enable_batchnorm_tracking(self.model)
 
         # 1. Perform Random Logit Interpolation
         lamb = torch.rand_like(logits_s_prime)
@@ -140,12 +132,12 @@ class AdaMatch(TrainerXU):
         prob_t_w = F.softmax(logits_t_w, dim=1)  # [N_t, K]
 
         # Align the target label distribution to that of the source
-        # FIXME Estimate using the current batch? Or sth else
         expected_ratio = prob_s_w.mean(dim=0) / prob_t_w.mean(dim=0)  # [K]
-        # FIXME Is this normalization correct?; L2 normalization?
         pseudo_t_w_unnorm = prob_t_w * expected_ratio  # [N_t, K]
+        # Normalize back to a valid probability dist
         pseudo_t_w = pseudo_t_w_unnorm / pseudo_t_w_unnorm.sum(dim=1, keepdims=True)
-        # Generate soft pseudo-labels; stop gradient
+
+        # Generate soft pseudo-labels for target loss computation; stop gradient
         pseudo_t_w = pseudo_t_w.detach()
 
         # 3. Relative Confidence Threshold
@@ -154,7 +146,7 @@ class AdaMatch(TrainerXU):
         # Filter for target pseudo-labels with high confidence
         mask_t = (pseudo_t_w.max(dim=1).values >= rel_conf_thre).float()  # [N_t]
 
-        # Loss Function
+        # 4. Loss Function
         loss_source = F.cross_entropy(logits_s_w, label_s) + F.cross_entropy(
             logits_s_s, label_s
         )
@@ -164,6 +156,7 @@ class AdaMatch(TrainerXU):
 
         mu = self._compute_loss_target_weight(n_iter, self.max_iter)
         loss = loss_source + (mu * loss_target)
+
         self.model_backward_and_update(loss)
 
         # Evaluate pseudo-labels' accuracy
@@ -194,7 +187,7 @@ class AdaMatch(TrainerXU):
 
         input_t_w = batch_u["img"]
         input_t_s = batch_u["img2"]
-        # label_u is used only for evaluating pseudo labels' accuracy
+        # label_t is used only for evaluating pseudo labels' accuracy
         label_t = batch_u["label"]
 
         input_s_w = input_s_w.to(self.device)
@@ -219,22 +212,6 @@ class AdaMatch(TrainerXU):
             )
 
     @staticmethod
-    def _set_batchnorm_eval(model):
-        def fn(module):
-            if isinstance(module, nn.modules.batchnorm._BatchNorm):
-                module.eval()
-
-        model.apply(fn)
-
-    @staticmethod
-    def _set_batchnorm_train(model):
-        def fn(module):
-            if isinstance(module, nn.modules.batchnorm._BatchNorm):
-                module.train()
-
-        model.apply(fn)
-
-    @staticmethod
     def _disable_batchnorm_tracking(model):
         def fn(module):
             if isinstance(module, nn.modules.batchnorm._BatchNorm):
@@ -251,21 +228,19 @@ class AdaMatch(TrainerXU):
         model.apply(fn)
 
     @staticmethod
-    def _soft_cross_entropy(
-        input: torch.FloatTensor, target: torch.FloatTensor
-    ) -> torch.FloatTensor:
+    def _soft_cross_entropy(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """
         Parameters
         ----------
-        input : torch.FloatTensor
+        input : torch.Tensor
             Predicted logits, [N, K]
-        target : torch.FloatTensor
+        target : torch.Tensor
             Target soft labels / probabilities, [N, K]
 
         Returns
         -------
-        torch.FloatTensor
-            [N]
+        torch.Tensor
+            No reduction, [N]
         """
         log_probs = F.log_softmax(input, dim=1)
 
