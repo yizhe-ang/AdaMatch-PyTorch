@@ -10,11 +10,13 @@ Test results are directly taken from the final checkpoint at the end of training
 
 Comparison of this implementation's results to Table 127 in the paper (**this implementation** / original paper):
 
+Unable to match the results as of yet. If you spot any mistakes in my implementation, **feel free to submit a PR :)**
+
 |              | mnist           | mnistm          | svhn            | syndigit        | usps            |     | Avg             |
 | ------------ | --------------- | --------------- | --------------- | --------------- | --------------- | --- | --------------- |
 | **mnist**    | -               | **97.9** / 99.2 | **82.1** / 96.9 | **99.2** / 99.7 | **96.7** / 97.8 |     | **94.0** / 98.4 |
-| **mnistm**   | **99.1** / 99.4 | -               | **90.2** / 96.9        | - / 99.7        | **98.1** / 97.8 |     | - / 98.5        |
-| **svhn**     | - / 99.3        | - / 98.9        | -               | - / 99.6        | **86.0** / 90.4 |     | - / 97.0        |
+| **mnistm**   | **99.1** / 99.4 | -               | **90.2** / 96.9 | **98.5** / 99.7 | **98.1** / 97.8 |     | **96.5** / 98.5 |
+| **svhn**     | **95.7** / 99.3 | **95.0** / 98.9 | -               | **98.7** / 99.6 | **86.0** / 90.4 |     | **93.9** / 97.0 |
 | **syndigit** | - / 99.4        | - / 99.0        | - / 97.0        | -               | **94.4** / 95.8 |     | - / 97.8        |
 | **usps**     | **99.0** / 99.3 | - / 98.9        | - / 96.6        | - / 94.9        | -               |     | - / 97.4        |
 |              |                 |                 |                 |                 |                 |     |                 |
