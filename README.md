@@ -10,7 +10,6 @@ Test results are directly taken from the final checkpoint at the end of training
 
 Comparison of this implementation's results to Table 127 in the paper (**this implementation** / original paper):
 
-Unable to match the results as of yet. If you spot any mistakes in my implementation, **feel free to submit a PR :)**
 
 |              | mnist           | mnistm          | svhn            | syndigit        | usps            |     | Avg             |
 | ------------ | --------------- | --------------- | --------------- | --------------- | --------------- | --- | --------------- |
@@ -21,6 +20,8 @@ Unable to match the results as of yet. If you spot any mistakes in my implementa
 | **usps**     | **99.0** / 99.3 | - / 98.9        | - / 96.6        | - / 94.9        | -               |     | - / 97.4        |
 |              |                 |                 |                 |                 |                 |     |                 |
 | **Avg**      | - / 99.4        | - / 99.0        | - / 96.8        | - / 98.5        | **93.8** / 95.5 |     | - / 97.8        |
+
+Unable to match the results as of yet. If you spot any mistakes in my implementation, **feel free to submit a PR :)**
 ### Differences from Paper
 - Training hyperparameters
   - Each experiment is only trained for 1000 epochs, while the paper trains for much longer.
