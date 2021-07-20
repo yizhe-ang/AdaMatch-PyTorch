@@ -24,5 +24,6 @@ TRAINER:
   ADAMATCH:
     # FIXME The paper uses flip-and-shift + CTAugment (remove flip for digit datasets?)
     STRONG_TRANSFORMS:
-      ["random_flip", "randaugment_fixmatch", "normalize", "cutout"]
+      ["randaugment_fixmatch", "normalize", "cutout"]
+      # ["random_flip", "randaugment_fixmatch", "normalize", "cutout"]
     CONF_THRE: 0.9
