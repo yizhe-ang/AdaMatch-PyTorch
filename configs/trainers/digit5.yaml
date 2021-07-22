@@ -11,10 +11,9 @@ OPTIM:
   NAME: "sgd"
   LR: 0.03
   WEIGHT_DECAY: 0.0005
-  MAX_EPOCH: 1000
+  MAX_EPOCH: 900
 
-  LR_SCHEDULER: "cosine"
-  LR_SCHEDULER_DECAY: 0.25
+  LR_SCHEDULER_DECAY: 0.25  # cosine scheduler decay rate
 
 TRAIN:
   COUNT_ITER: "train_u"
@@ -22,8 +21,9 @@ TRAIN:
 
 TRAINER:
   ADAMATCH:
-    # FIXME The paper uses flip-and-shift + CTAugment (remove flip for digit datasets?)
+    # FIXME The paper uses flip-and-shift + CTAugment
     STRONG_TRANSFORMS:
       ["randaugment_fixmatch", "normalize", "cutout"]
       # ["random_flip", "randaugment_fixmatch", "normalize", "cutout"]
     CONF_THRE: 0.9
+    EMA_MOMENTUM: 0.999

@@ -5,7 +5,6 @@ INPUT:
   PIXEL_MEAN: [0.5, 0.5, 0.5]
   PIXEL_STD: [0.5, 0.5, 0.5]
   # Weak augmentations
-  # FIXME The paper uses flip-and-shift (remove flip for digit datasets?)
   TRANSFORMS: ["random_crop", "normalize"]
   # TRANSFORMS: ["random_flip", "random_crop", "normalize"]
 
