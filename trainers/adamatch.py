@@ -190,7 +190,8 @@ class AdaMatch(TrainerXU):
         loss = loss_source + (mu * loss_target)
 
         self.model_backward_and_update(loss)
-        self.model.update()  # Update EMA
+        if self.ema_momentum:
+            self.model.update()  # Update EMA
 
         with torch.no_grad():
             # Evaluate pseudo-labels' accuracy
