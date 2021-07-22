@@ -76,7 +76,7 @@ class AdaMatch(TrainerXU):
 
         # Keep EMA of model parameters for evaluation
         self.ema_momentum = cfg.TRAINER.ADAMATCH.EMA_MOMENTUM
-        if self.ema_momentum:
+        if self.ema_momentum != 0:
             self.model = ExponentialMovingAverageModule(self.model, self.ema_momentum)
 
         if cfg.MODEL.INIT_WEIGHTS:
@@ -159,7 +159,7 @@ class AdaMatch(TrainerXU):
 
         # Align the target label distribution to that of the source
         # Update running estimates of label distributions
-        model = self.model.model if self.ema_momentum else self.model
+        model = self.model.model if self.ema_momentum != 0 else self.model
         label_dist_s = model.label_dist_s(prob_s_w.detach().mean(dim=0))
         label_dist_t = model.label_dist_t(prob_t_w.detach().mean(dim=0))
         expected_ratio = (1e-6 + label_dist_s) / (1e-6 + label_dist_t)  # [K]
@@ -190,7 +190,7 @@ class AdaMatch(TrainerXU):
         loss = loss_source + (mu * loss_target)
 
         self.model_backward_and_update(loss)
-        if self.ema_momentum:
+        if self.ema_momentum != 0:
             self.model.update()  # Update EMA
 
         with torch.no_grad():
