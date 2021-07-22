@@ -1,4 +1,5 @@
 import math
+from functools import partial
 
 import torch
 import torch.nn as nn
@@ -11,12 +12,24 @@ from dassl.metrics import compute_accuracy
 from dassl.optim.optimizer import build_optimizer
 from dassl.utils.torchtools import count_num_param, load_pretrained_weights
 
+from .utils import (
+    ExponentialMovingAverage,
+    ExponentialMovingAverageModule,
+    MovingAverage,
+    cosine_schedule,
+    unnormalize_img,
+)
 
-def unnormalize_img(img, mean, std):
-    std = img.new_tensor(std)[:, None, None]
-    mean = img.new_tensor(mean)[:, None, None]
 
-    return img * std + mean
+class AdaMatchNet(SimpleNet):
+    def __init__(self, cfg, model_cfg, num_classes, **kwargs):
+        super().__init__(cfg, model_cfg, num_classes, **kwargs)
+
+        # Keep a running estimate of source / target label distributions
+        self.label_dist_s = ExponentialMovingAverage(
+            (num_classes,), init_value=1 / num_classes
+        )
+        self.label_dist_t = MovingAverage((num_classes,), init_value=1 / num_classes)
 
 
 @TRAINER_REGISTRY.register()
@@ -33,7 +46,6 @@ class AdaMatch(TrainerXU):
 
     def check_cfg(self, cfg):
         assert len(cfg.TRAINER.ADAMATCH.STRONG_TRANSFORMS) > 0
-        assert cfg.OPTIM.LR_SCHEDULER == "cosine"
 
     def build_data_loader(self):
         cfg = self.cfg
@@ -60,31 +72,45 @@ class AdaMatch(TrainerXU):
         cfg = self.cfg
 
         print("Building model")
-        self.model = SimpleNet(cfg, cfg.MODEL, self.num_classes)
+        self.model = AdaMatchNet(cfg, cfg.MODEL, self.num_classes)
+
+        # Keep EMA of model parameters for evaluation
+        self.ema_momentum = cfg.TRAINER.ADAMATCH.EMA_MOMENTUM
+        if self.ema_momentum:
+            self.model = ExponentialMovingAverageModule(self.model, self.ema_momentum)
+
         if cfg.MODEL.INIT_WEIGHTS:
             load_pretrained_weights(self.model, cfg.MODEL.INIT_WEIGHTS)
         self.model.to(self.device)
         print("# params: {:,}".format(count_num_param(self.model)))
         self.optim = build_optimizer(self.model, cfg.OPTIM)
 
-        # Change lr_scheduler settings
+        # Use custom lr_scheduler
         num_batches = len(self.train_loader_u)
         self.max_iter = self.max_epoch * num_batches
 
-        self.sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+        lr_lambda = partial(
+            cosine_schedule,
+            max_iter=self.max_iter,
+            decay=cfg.OPTIM.LR_SCHEDULER_DECAY,
+        )
+        self.sched = torch.optim.lr_scheduler.LambdaLR(
             self.optim,
-            self.max_iter,
-            eta_min=cfg.OPTIM.LR * cfg.OPTIM.LR_SCHEDULER_DECAY,  # min lr
+            lr_lambda,
         )
 
         self.register_model("model", self.model, self.optim, self.sched)
 
     def assess_y_pred_quality(self, y_pred, y_true, mask):
         n_masked_correct = (y_pred.eq(y_true).float() * mask).sum()
+        # Accuracy of masked predictions
         acc_thre = n_masked_correct / (mask.sum() + 1e-5)
-        acc_raw = y_pred.eq(y_true).sum() / y_pred.numel()  # raw accuracy
+        # Raw accuracy
+        acc_raw = y_pred.eq(y_true).sum() / y_pred.numel()
         keep_rate = mask.sum() / mask.numel()
+
         output = {"acc_thre": acc_thre, "acc_raw": acc_raw, "keep_rate": keep_rate}
+
         return output
 
     def forward_backward(self, batch_s, batch_t):
@@ -132,48 +158,67 @@ class AdaMatch(TrainerXU):
         prob_t_w = F.softmax(logits_t_w, dim=1)  # [N_t, K]
 
         # Align the target label distribution to that of the source
-        expected_ratio = prob_s_w.mean(dim=0) / prob_t_w.mean(dim=0)  # [K]
+        # Update running estimates of label distributions
+        model = self.model.model if self.ema_momentum else self.model
+        label_dist_s = model.label_dist_s(prob_s_w.detach().mean(dim=0))
+        label_dist_t = model.label_dist_t(prob_t_w.detach().mean(dim=0))
+        expected_ratio = (1e-6 + label_dist_s) / (1e-6 + label_dist_t)  # [K]
         pseudo_t_w_unnorm = prob_t_w * expected_ratio  # [N_t, K]
+
         # Normalize back to a valid probability dist
         pseudo_t_w = pseudo_t_w_unnorm / pseudo_t_w_unnorm.sum(dim=1, keepdims=True)
-
         # Generate soft pseudo-labels for target loss computation; stop gradient
         pseudo_t_w = pseudo_t_w.detach()
 
         # 3. Relative Confidence Threshold
-        mean_max_conf = prob_s_w.max(dim=1).values.mean()
+        mean_max_conf = prob_s_w.detach().max(dim=1).values.mean()
         rel_conf_thre = self.conf_thre * mean_max_conf
         # Filter for target pseudo-labels with high confidence
         mask_t = (pseudo_t_w.max(dim=1).values >= rel_conf_thre).float()  # [N_t]
 
         # 4. Loss Function
-        loss_source = F.cross_entropy(logits_s_w, label_s) + F.cross_entropy(
-            logits_s_s, label_s
+        loss_source = 0.5 * (
+            F.cross_entropy(logits_s_w, label_s) + F.cross_entropy(logits_s_s, label_s)
         )
 
-        loss_target = self._soft_cross_entropy(logits_t_s, pseudo_t_w)  # [N_t]
+        loss_target = F.cross_entropy(
+            logits_t_s, pseudo_t_w.argmax(dim=1), reduction="none"
+        )  # [N_t]
         loss_target = (loss_target * mask_t).mean()
 
         mu = self._compute_loss_target_weight(n_iter, self.max_iter)
         loss = loss_source + (mu * loss_target)
 
         self.model_backward_and_update(loss)
+        self.model.update()  # Update EMA
 
-        # Evaluate pseudo-labels' accuracy
         with torch.no_grad():
+            # Evaluate pseudo-labels' accuracy
             y_t_pred_stats = self.assess_y_pred_quality(
                 pseudo_t_w.argmax(dim=1), label_t, mask_t
             )
 
-        loss_summary = {
-            "loss_s": loss_source.item(),
-            "acc_s": compute_accuracy(logits_s, label_s.repeat(2))[0].item(),
-            "loss_t": loss_target.item(),
-            "y_t_pred_acc_raw": y_t_pred_stats["acc_raw"],
-            "y_t_pred_acc_thre": y_t_pred_stats["acc_thre"],
-            "y_t_pred_keep": y_t_pred_stats["keep_rate"],
-        }
-        self.write_scalar("train/loss_t_weight", mu, n_iter)
+            # Logging
+            loss_summary = {
+                "loss_s": loss_source.item(),
+                "acc_s": compute_accuracy(logits_s, label_s.repeat(2))[0].item(),
+                "loss_t": loss_target.item(),
+                "y_t_pred_acc_raw": y_t_pred_stats["acc_raw"],
+                "y_t_pred_acc_thre": y_t_pred_stats["acc_thre"],
+                "y_t_pred_keep": y_t_pred_stats["keep_rate"],
+            }
+            self.write_scalar("train/loss_t_weight", mu, n_iter)
+            self.write_scalar("train/rel_conf_thre", rel_conf_thre, n_iter)
+            self.write_scalar(
+                "train/logits_s_diff",
+                (logits_s_prime - logits_s_dprime).pow(2).mean(),
+                n_iter,
+            )
+            self.write_scalar(
+                "train/label_dist_kl",
+                F.kl_div(label_dist_s.log(), label_dist_t),
+                n_iter,
+            )
 
         # Update learning rate scheduler
         self.update_lr()
@@ -226,25 +271,6 @@ class AdaMatch(TrainerXU):
                 module.track_running_stats = True
 
         model.apply(fn)
-
-    @staticmethod
-    def _soft_cross_entropy(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        """
-        Parameters
-        ----------
-        input : torch.Tensor
-            Predicted logits, [N, K]
-        target : torch.Tensor
-            Target soft labels / probabilities, [N, K]
-
-        Returns
-        -------
-        torch.Tensor
-            No reduction, [N]
-        """
-        log_probs = F.log_softmax(input, dim=1)
-
-        return -(target * log_probs).sum(dim=1)
 
     @staticmethod
     def _compute_loss_target_weight(n_iter, max_iter):
