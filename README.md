@@ -1,7 +1,7 @@
 # AdaMatch-PyTorch
 Unofficial PyTorch Implementation of [AdaMatch: A Unified Approach to Semi-Supervised Learning and Domain Adaptation](https://arxiv.org/abs/2106.04732), using [Dassl.pytorch](https://github.com/KaiyangZhou/Dassl.pytorch).
 
-With reference to the official implementation https://github.com/google-research/adamatch.
+With reference to the official implementation at https://github.com/google-research/adamatch.
 
 ## Results
 
@@ -11,18 +11,6 @@ Unsupervised Domain Adaptation (UDA) experiments are run on the DigitFive datase
 Test results are directly taken from the final checkpoint at the end of training (the paper takes the median over the last ten checkpoints).
 
 Comparison of this implementation's results to Table 127 in the paper (**this implementation** / original paper):
-
-
-| <!--         |                 |                 | mnist           | mnistm          | svhn            | syndigit | usps            |     | Avg |
-| ------------ | --------------- | --------------- | --------------- | --------------- | --------------- | -------- | --------------- |
-| **mnist**    | -               | **97.9** / 99.2 | **82.1** / 96.9 | **99.2** / 99.7 | **96.7** / 97.8 |          | **94.0** / 98.4 |
-| **mnistm**   | **99.1** / 99.4 | -               | **90.2** / 96.9 | **98.5** / 99.7 | **98.1** / 97.8 |          | **96.5** / 98.5 |
-| **svhn**     | **95.7** / 99.3 | **95.0** / 98.9 | -               | **98.7** / 99.6 | **86.0** / 90.4 |          | **93.9** / 97.0 |
-| **syndigit** | - / 99.4        | - / 99.0        | - / 97.0        | -               | **94.4** / 95.8 |          | - / 97.8        |
-| **usps**     | **99.0** / 99.3 | - / 98.9        | - / 96.6        | - / 94.9        | -               |          | - / 97.4        |
-|              |                 |                 |                 |                 |                 |          |                 |
-| **Avg**      | - / 99.4        | - / 99.0        | - / 96.8        | - / 98.5        | **93.8** / 95.5 |          | - / 97.8        | --> |
-
 
 |              | mnist           | mnistm          | svhn            | syndigit        | usps            |     | Avg             |
 | ------------ | --------------- | --------------- | --------------- | --------------- | --------------- | --- | --------------- |
